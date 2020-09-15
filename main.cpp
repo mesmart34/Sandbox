@@ -4,6 +4,11 @@
 #include <cstdint>
 #include <cmath>
 
+struct Particle
+{
+    float weight;
+};
+
 struct v2i
 {
     std::uint32_t x, y;
@@ -33,6 +38,7 @@ class Sandbox
             running = true;
         }
         mouseCoords = {0, 0};
+        //world = std::uint32_t[width * height];
         Run();
     } 
     private:
@@ -92,7 +98,7 @@ class Sandbox
                 }
             }
             
-            const int range = 30;
+            const auto range = 30;
             for(int i = -range; i <= range; i++)
             {
                 for(int j = -range; j <= range; j++)
@@ -101,9 +107,22 @@ class Sandbox
                     auto y = mouseCoords.y + j;
                     auto d = std::sqrt(std::pow(std::max(x, mouseCoords.x) - std::min(x, mouseCoords.x), 2) + std::pow(std::max(y, mouseCoords.y) - std::min(y, mouseCoords.y), 2));
                     if(x >= 0 && x < width && y >= 0 && y < height && d < range * 0.75f)
-                        PutPixel(pixels, x, y, 0x252FFF);
+                        PutPixel(world, x, y, 0x252FFF);
                 }
             }
+            
+            
+            
+            
+            for(std::uint32_t x = 0; x < width; x++)
+            {
+                for(std::uint32_t y = 0; y < height; y++)
+                {
+                    if(world[x + y * width] != 0)
+                        PutPixel(pixels, x, y, 0x124245);
+                }
+            }
+            
             
             SDL_UpdateTexture(screenTexture, 0, &pixels, 4 * width);
             SDL_RenderCopy(renderer, screenTexture, 0, 0);
@@ -117,6 +136,7 @@ class Sandbox
     SDL_Texture* screenTexture;
     bool running;
     v2i mouseCoords;
+    std::uint32_t world[800 * 600];
 };
 
 int SDL_main(int argc, char** argv)

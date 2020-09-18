@@ -23,7 +23,7 @@ class Sandbox
         {
             std::cout << SDL_GetError() << std::endl;
         }
-        window = SDL_CreateWindow("Sandbox", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, width, height, SDL_WINDOW_SHOWN);
+        window = SDL_CreateWindow("Sandbox", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, width, height, SDL_WINDOW_RESIZABLE);
         renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED);
         SDL_RenderSetLogicalSize(renderer, r_width, r_height);
         if(window == nullptr || renderer == nullptr)
@@ -65,7 +65,7 @@ class Sandbox
                 {
                     if(event.button.button == SDL_BUTTON_LEFT)
                     {
-                        world.DrawCircle(mouseCoords.x, mouseCoords.y);
+                        world.Draw(mouseCoords.x, mouseCoords.y);
                     }
                 } break;
                 case SDL_KEYDOWN:

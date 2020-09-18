@@ -67,29 +67,37 @@ void World::ZeroCell(std::uint32_t index)
 void World::MoveCell(std::uint32_t x, std::uint32_t y)
 {
     auto index = x + y * w;
-    vel_y[index] += G;
-    auto steps = (int)vel_y[index];
-    auto dir = sign(vel_y[index]);
+    acc_y[index] = G;
+    vel_x[index] += acc_x[index];
+    vel_y[index] += acc_y[index];
+    auto steps_x = (int)vel_x[index];
+    auto steps_y = (int)vel_y[index];
+    auto dir_x = sign(vel_x[index]);
+    auto dir_y = sign(vel_y[index]);
     auto i = 0;
     auto pos_y = y;
-    while(i < steps)
+    while(i < steps_y)
     {
-        pos_y += dir;
-        if(pos_y == h)
+        pos_y += dir_y;
+        if(pos_y == h || pos_y == 1)
+        {
+            vel_y[index] = 0;
+            acc_y[index] = 0;
             break;
-        if(type[x + pos_y * w] != 0)
+        }
+        if(type[x + pos_y * w] != AIR)
         {
             auto collision_index = x + pos_y * w;
             Collide(index, collision_index);
             break;
         }
-        
         SetCell(index, x + pos_y * w);
         ZeroCell(index);
-        scanned[x + pos_y * w] = 1;
-        i++;
         
+        
+        i++;
     }
+    scanned[x + pos_y * w] = 1;
 }
 
 void World::Collide(std::uint32_t index_a, std::uint32_t index_b)
@@ -99,6 +107,9 @@ void World::Collide(std::uint32_t index_a, std::uint32_t index_b)
     auto vel_x_b = vel_x[index_b];
     vel_x[index_a] = (vel_x_a + vel_x_b) / 2 * bounce;
     vel_x[index_b] = (vel_x_a + vel_x_b) / 2 * bounce;
+    
+    if(std::fabs((int)vel_y[index_a] + (int)vel_y[index_b]) < 2)
+        return;
     
     //Y
     auto vel_y_a = vel_y[index_a];
@@ -111,7 +122,7 @@ void World::Collide(std::uint32_t index_a, std::uint32_t index_b)
 void World::Update()
 {
     std::memset(scanned, 0, w * h);
-    for(auto y = 0; y < h; y++)
+    for(auto y = h; y >= 0; y--)
     {
         for(auto x = 0; x < w; x++)
         {

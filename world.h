@@ -9,6 +9,11 @@
 #include <cmath>
 #include <ctime>
 #include <cstring>
+#include <iostream>
+
+#define AIR 0
+#define SAND 1
+#define WATER 2
 
 class World
 {
@@ -18,6 +23,8 @@ class World
         type = new std::uint8_t[w * h]();
         vel_x = new float[w * h]();
         vel_y = new float[w * h]();
+        acc_x = new float[w * h]();
+        acc_y = new float[w * h]();
         scanned = new std::uint8_t[w * h]();
         //FillRandomly();
     }
@@ -36,12 +43,14 @@ class World
     void ZeroCell(std::uint32_t index);
     
     float bounce = 1.0f;
-    float G = 10.8f;
+    float G = 3.1f;
     int w, h;
     std::uint8_t* type;
     std::uint8_t* scanned;
     float* vel_x;
     float* vel_y;
+    float* acc_x;
+    float* acc_y;
 };
 
 #endif //WORLD_H

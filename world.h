@@ -10,6 +10,7 @@
 #include <ctime>
 #include <cstring>
 #include <iostream>
+#include <algorithm>
 
 #define AIR 0
 #define SAND 1
@@ -32,18 +33,30 @@ class World
     void FillRandomly();
     void Update();
     void Render(SDL_Renderer* renderer);
-    void Draw(int x, int y);
-    void DrawCircle(int x, int y);
+    void Draw(int x, int y, std::uint8_t _type);
+    void DrawCircle(int x, int y, float r, std::uint8_t type);
+    void Erase(int x, int y);
+    void EraseCircle(int x, int y, int r);
     
     private:
     
-    void MoveCell(std::uint32_t x, std::uint32_t y);
-    void Collide(std::uint32_t index_a, std::uint32_t index_b);
-    void SetCell(std::uint32_t last_index, std::uint32_t index);
-    void ZeroCell(std::uint32_t index);
+    std::uint8_t GetType(std::int32_t ind);
+    void ProcessCell(std::int32_t x, std::int32_t y);
+    void MoveCell(std::int32_t from, std::int32_t to);
+    //void Collide(std::int32_t index_a, std::int32_t index_b);
+    void SetCell(std::int32_t last_index, std::int32_t index);
+    void ZeroCell(std::int32_t index);
+    bool IsInBounds(std::int32_t x, std::int32_t y);
+    void SwapCells(std::int32_t a, std::int32_t b);
+    
+    //std::uint32_t GetColorFromSDLColor(SDL_Color color);
+    
+    void UpdateSand(std::int32_t x, std::int32_t y);
+    void UpdateWater(std::int32_t x, std::int32_t y);
+    
     
     float bounce = 1.0f;
-    float G = 3.1f;
+    float G = 9.81f;
     int w, h;
     std::uint8_t* type;
     std::uint8_t* scanned;

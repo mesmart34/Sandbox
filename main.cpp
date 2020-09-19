@@ -7,7 +7,7 @@
 
 struct v2i
 {
-    std::uint32_t x, y;
+    std::int32_t x, y;
 };
 
 class Sandbox
@@ -64,9 +64,16 @@ class Sandbox
                 case SDL_MOUSEBUTTONDOWN:
                 {
                     if(event.button.button == SDL_BUTTON_LEFT)
-                    {
-                        world.Draw(mouseCoords.x, mouseCoords.y);
-                    }
+                        mouse_pressed_left = true;
+                    if(event.button.button == SDL_BUTTON_RIGHT)
+                        mouse_pressed_right = true;
+                } break;
+                case SDL_MOUSEBUTTONUP:
+                {
+                    if(event.button.button == SDL_BUTTON_LEFT)
+                        mouse_pressed_left = false;
+                    if(event.button.button == SDL_BUTTON_RIGHT)
+                        mouse_pressed_right = false;
                 } break;
                 case SDL_KEYDOWN:
                 {
@@ -74,7 +81,6 @@ class Sandbox
                         running = false;
                 } break;
             }
-            
         }
     }
     
@@ -85,8 +91,11 @@ class Sandbox
             HandleEvents();
             SDL_SetRenderDrawColor(renderer, 0, 0, 0, 0);
             
-            //world.Draw(mouseCoords.x, mouseCoords.y);
-            
+            if(mouse_pressed_left)
+                world.DrawCircle(mouseCoords.x, mouseCoords.y, 5, SAND
+                                 );
+            if(mouse_pressed_right)
+                world.DrawCircle(mouseCoords.x, mouseCoords.y, 5, WATER);
             world.Update();
             
             SDL_RenderClear(renderer);
@@ -103,13 +112,15 @@ class Sandbox
     SDL_Window* window;
     SDL_Renderer* renderer;
     bool running;
+    bool mouse_pressed_left;
+    bool mouse_pressed_right;
     v2i mouseCoords;
     World world;
 };
 
 int SDL_main(int argc, char** argv)
 {
-    auto sandbox = new Sandbox(800, 600, 100, 75, false);
+    auto sandbox = new Sandbox(800, 600, 100 *2, 75* 2, false);
     sandbox->Init();
     return 0;
 }

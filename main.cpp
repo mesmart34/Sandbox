@@ -224,7 +224,8 @@ Update(f32 delta_time)
     //printf("%f\n", delta_time);
     if(mouse.left)
     {
-        DrawCircle((u32)mouse.pos.x, (u32)mouse.pos.y, radius, wood_particle);
+        //DrawCircle((u32)mouse.pos.x, (u32)mouse.pos.y, radius, wood_particle);
+        SetParticle((u32)mouse.pos.x, (u32)mouse.pos.y, sand_particle);
     }
     if(mouse.right)
     {
@@ -261,7 +262,7 @@ Update(f32 delta_time)
         }
     }
     
-    for(u32 i = 0; i < width * height; i++)
+    for(i32 i = 0; i < width * height; i++)
         GetParticle(i)->updated = false;
     
 }
@@ -443,50 +444,32 @@ UpdateWater(i32 x, i32 y)
         
     }
 }
+
 internal void
 UpdateSand(i32 x, i32 y)
 {
-    u32 index = GetIndex(x, y);
-    
-    
-    
-    u32 b = GetIndex(x, y + 1);
-    u32 br = GetIndex(x + 1, y + 1);
-    u32 bl = GetIndex(x - 1, y + 1);
-    
+    i32 index = GetIndex(x, y);
+    i32 b = GetIndex(x, y + 1);
+    i32 br = GetIndex(x + 1, y + 1);
+    i32 bl = GetIndex(x - 1, y + 1);
     
     particle* prt = GetParticle(b);
     particle* prt_br = GetParticle(br);
     particle* prt_bl = GetParticle(bl);
-    if(GetParticle(index)->updated)
-        return;
+    
     if(prt->id == air && IsInBounds(x, y + 1))
     {
         MoveParticle(index, b, sand_particle);
-    } else if(prt_bl->id == air && IsInBounds(x - 1, y + 1))
-    {
-        MoveParticle(index, bl, sand_particle);
+        GetParticle(b)->updated = true;
     } else if(prt_br->id == air && IsInBounds(x + 1, y + 1))
     {
         MoveParticle(index, br, sand_particle);
-    }
-    
-    /*
-    i32 side = rand() % 2;
-    if(side == 0)
+        GetParticle(br)->updated = true;
+    } else if(prt_bl->id == air && IsInBounds(x - 1, y + 1))
     {
-        if(prt_bl->id == air && IsInBounds(x - 1, y + 1))
-        {
-            MoveParticle(index, bl, sand_particle);
-            world_data[bl].updated = true;
-        }
-    }else if(side == 1) {
-        if(prt_br->id == air && IsInBounds(x + 1, y + 1))
-        {
-            MoveParticle(index, br, sand_particle);
-            world_data[br].updated = true;
-        }
-    }*/
+        MoveParticle(index, bl, sand_particle);
+        GetParticle(bl)->updated = true;
+    }
 }
 
 int main(int argc, char** argv)

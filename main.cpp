@@ -2,9 +2,12 @@
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
+#include <ctime>
+#include <cmath>
 #include "SDL2/SDL.h"
 
 #define internal static
+#define global static
 
 typedef uint64_t u64;
 typedef uint32_t u32;
@@ -17,6 +20,7 @@ typedef int16_t i16;
 typedef int8_t i8;
 
 typedef float f32;
+typedef double f64;
 
 struct v2i
 {
@@ -39,45 +43,59 @@ struct particle
 
 
 //SDL
-static SDL_Window* window;
-static SDL_Renderer* renderer;
-static SDL_Texture* screen_texture;
+global SDL_Window* window;
+global SDL_Renderer* renderer;
+global SDL_Texture* screen_texture;
 
 // Core settings
-const static char* title = "Sandbox";
-const static i32 width = 800 / 6;
-const static i32 height = 600 / 6;
-const static i32 window_width = 800;
-const static i32 window_height = 600;
+const global char* title = "Sandbox";
+const global i32 width = 1920 / 6;
+const global i32 height = 1080 / 6;
+const global i32 window_width = 1920 / 2;
+const global i32 window_height = 1080 / 2;
+const global f32 ms_per_update = 1000.0f / 60.0f;
 
-static bool interrupted = false;
-static v2i mouse_coords = {};
-static bool mlb; // Mouse left button
-static bool mrb; // Mouse right button
+global bool interrupted = false;
+
+global struct mouse_t
+{
+    v2i pos;
+    bool left, right, middle;
+} mouse;
+
 
 // Sandbox
 
-static particle *world_data;
-static const f32 gravity = 9.81f;
+global particle *world_data;
+global const f32 gravity = 9.81f;
+global const i32 radius = 25;
 
 enum particle_type : u8
 {
     air = 0, 
     sand = 1,
-    water = 2
+    water = 2,
+    wood = 3
 };
 
+global const u32 water_color = 0x4291FFFF;
+global const u32 sand_color = 0xDE9B1FFF;
+global const u32 wood_color = 0x4f3818FF;
+
 particle empty_particle {0, 0, v2{0, 0}, false};
-particle sand_particle { sand, 0xDE9B1FFF, v2{0, 0}, false };
+particle sand_particle { sand, sand_color, v2{0, 0}, false };
+particle water_particle { water, water_color, v2{0, 0}, false };
+particle wood_particle { wood, wood_color, v2{0, 0}, false };
 
 // Functions declorations
 internal void Init();
 internal void Run();
 internal void HandleEvents();
-internal void Update();
+internal void Update(f32 delta_time);
 internal void Render();
 
 internal void UpdateSand(i32 x, i32 y);
+internal void UpdateWater(i32 x, i32 y);
 
 internal inline u32 GetIndex(i32 x, i32 y);
 internal inline particle* GetParticle(u32 index);
@@ -85,13 +103,14 @@ internal bool IsInBounds(i32 x, i32 y);
 
 internal void WriteData(i32 index, particle prt);
 
-internal void SetParticle(u32 x, u32 y, particle prt);
-internal void EraseParticle(u32 x, u32 y);
+internal void SetParticle(i32 x, i32 y, particle prt);
+internal void EraseParticle(i32 x, i32 y);
+internal inline void MoveParticle(u32 from, u32 to, particle prt);
+internal void DrawCircle(i32 x, i32 y, i32 r, particle prt);
+internal void EraseCirlce(i32 x, i32 y, i32 r);
 
-
-
-
-
+internal f32 Distance(v2 a, v2 b);
+internal inline i8 Sign(f32 value);
 
 
 internal void
@@ -103,7 +122,7 @@ Init()
     screen_texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_STREAMING, width, height);
     SDL_RenderSetLogicalSize(renderer, width, height);
     
-    mouse_coords = {0, 0};
+    srand(time(0));
     
     world_data = (particle*)malloc(sizeof(particle) * width * height);
     for(i32 i = 0; i < width * height; i++)
@@ -132,22 +151,26 @@ HandleEvents()
             } break;
             case SDL_MOUSEMOTION:
             {
-                mouse_coords.x = event.motion.x;
-                mouse_coords.y = event.motion.y;
+                mouse.pos.x = event.motion.x;
+                mouse.pos.y = event.motion.y;
             } break;
             case SDL_MOUSEBUTTONDOWN:
             {
                 if(event.button.button == SDL_BUTTON_LEFT)
-                    mlb = true;
+                    mouse.left = true;
                 if(event.button.button == SDL_BUTTON_RIGHT)
-                    mrb = true;
+                    mouse.right = true;
+                if(event.button.button == SDL_BUTTON_MIDDLE)
+                    mouse.middle = true;
             } break;
             case SDL_MOUSEBUTTONUP:
             {
                 if(event.button.button == SDL_BUTTON_LEFT)
-                    mlb = false;
+                    mouse.left = false;
                 if(event.button.button == SDL_BUTTON_RIGHT)
-                    mrb = false;
+                    mouse.right = false;
+                if(event.button.button == SDL_BUTTON_MIDDLE)
+                    mouse.middle = false;
             } break;
             case SDL_KEYDOWN:
             {
@@ -159,15 +182,31 @@ HandleEvents()
     }
 }
 
-
 internal void 
 Run()
 {
+    f32 prev = SDL_GetTicks();
+    f32 lag = 0.0f;
+    f32 delta_time = 0.0f;
     for(;!interrupted;)
     {
+        f32 current = SDL_GetTicks();
+        delta_time = (f32)(current - prev);
+        prev = current;
+        lag += delta_time;
+        
+        //delta_time = (float)((now - last) * 1000 / (float)SDL_GetPerormanceFrequency());
+        
+        
+        
         HandleEvents();
         
-        Update();
+        while(lag >= ms_per_update)
+        {
+            Update(delta_time * 0.001f);
+            lag -= ms_per_update;
+        }
+        
         
         SDL_SetRenderDrawColor(renderer, 0, 0, 0, 0);
         
@@ -176,26 +215,29 @@ Run()
         Render();
         
         SDL_RenderPresent(renderer);
-        SDL_Delay(1000 / 60);
     }
 }
 
 internal void 
-Update()
+Update(f32 delta_time)
 {
-    
-    if(mlb)
+    //printf("%f\n", delta_time);
+    if(mouse.left)
     {
-        SetParticle((u32)mouse_coords.x, (u32)mouse_coords.y, sand_particle);
+        DrawCircle((u32)mouse.pos.x, (u32)mouse.pos.y, radius, wood_particle);
     }
-    if(mrb)
+    if(mouse.right)
     {
-        EraseParticle((u32)mouse_coords.x, (u32)mouse_coords.y);
+        DrawCircle((u32)mouse.pos.x, (u32)mouse.pos.y, radius, sand_particle);
+    }
+    if(mouse.middle)
+    {
+        EraseCirlce((u32)mouse.pos.x, (u32)mouse.pos.y, radius);
     }
     
-    for(u32 y = height - 1; y > 0; y--)
+    for(i32 y = height - 2; y >= 0; y--)
     {
-        for(u32 x = 0; x < width; x++)
+        for(i32 x = 0; x < width; x++)
         {
             u32 index = GetIndex(x, y);
             particle* prt = GetParticle(index); 
@@ -211,32 +253,55 @@ Update()
             {
                 case(air): {  } break;
                 case(sand): { UpdateSand(x, y); } break;
+                case(water): { UpdateWater(x, y); } break;
             };
             
-            world_data[index].updated = true;
+            
             
         }
     }
     
     for(u32 i = 0; i < width * height; i++)
-        world_data[i].updated = false;
+        GetParticle(i)->updated = false;
     
 }
 
+
+#if 1
 internal void
 Render()
 {
     u32 data[width * height] = {};
     for(i32 i = 0; i < width * height; i++)
     {
-        particle* prt = GetParticle(i);
-        if(prt->id == air)
+        particle prt = *GetParticle(i);
+        if(prt.id == air)
             continue;
-        data[i] = prt->color;
+        data[i] = prt.color;
     }
     SDL_UpdateTexture(screen_texture, NULL, &data[0], sizeof(u32) * width);
     SDL_RenderCopy(renderer, screen_texture, NULL, NULL);
 }
+#else
+internal void
+Render()
+{
+    for(i32 i = 0; i < width * height; i++)
+    {
+        particle* prt = GetParticle(i);
+        if(prt->id == air)
+            continue;
+        i32 x = i % width;
+        i32 y = i / width;
+        u8 r = prt->color >> 24;
+        u8 g = prt->color >> 16;
+        u8 b = prt->color >> 8;
+        u8 a = prt->color;
+        SDL_SetRenderDrawColor(renderer, r, g, b, a);
+        SDL_RenderDrawPoint(renderer, x, y);
+    }
+}
+#endif
 
 
 internal inline u32 
@@ -264,7 +329,7 @@ IsInBounds(i32 x, i32 y)
 }
 
 internal void
-SetParticle(u32 x, u32 y, particle prt)
+SetParticle(i32 x, i32 y, particle prt)
 {
     if(!IsInBounds(x, y))
         return;
@@ -275,7 +340,7 @@ SetParticle(u32 x, u32 y, particle prt)
 }
 
 internal void
-EraseParticle(u32 x, u32 y)
+EraseParticle(i32 x, i32 y)
 {
     if(!IsInBounds(x, y))
         return;
@@ -283,32 +348,145 @@ EraseParticle(u32 x, u32 y)
     WriteData(index, empty_particle);
 }
 
+internal inline i8
+Sign(f32 value)
+{
+    if(value < 0.0f)
+        return -1;
+    return 1;
+}
+
+internal f32
+Distance(v2 a, v2 b)
+{
+    return sqrt((b.x - a.x) * (b.x - a.x) + (b.y - a.y) * (b.y - a.y));
+}
+
+internal void
+EraseCirlce(i32 x, i32 y, i32 r)
+{
+    for(i32 _x = x - r; _x < x + r; _x++)
+    {
+        for(i32 _y = y - r; _y < y + r; _y++)
+        {
+            f32 d = Distance(v2{x, y}, v2{_x, _y});
+            if(d >= r * 0.75)
+                continue;
+            EraseParticle(_x, _y);
+        }
+    }
+}
+
+internal void
+DrawCircle(i32 x, i32 y, i32 r, particle prt)
+{
+    for(i32 _x = x - r; _x < x + r; _x++)
+    {
+        for(i32 _y = y - r; _y < y + r; _y++)
+        {
+            f32 d = Distance(v2{x, y}, v2{_x, _y});
+            if(d >= r * 0.75)
+                continue;
+            SetParticle(_x, _y, prt);
+        }
+    }
+}
+
+internal inline void
+MoveParticle(u32 from, u32 to, particle prt)
+{
+    WriteData(to, prt);
+    WriteData(from, empty_particle);
+}
+
+internal void
+UpdateWater(i32 x, i32 y)
+{
+    u32 index = GetIndex(x, y);
+    
+    
+    
+    u32 b = GetIndex(x, y + 1);
+    u32 br = GetIndex(x + 1, y);
+    u32 bl = GetIndex(x - 1, y);
+    
+    
+    particle* prt = GetParticle(b);
+    particle* prt_br = GetParticle(br);
+    particle* prt_bl = GetParticle(bl);
+    
+    if(prt->id == air && IsInBounds(x, y + 1))
+    {
+        MoveParticle(index, b, water_particle);
+        return;
+    }
+    i32 side = rand() % 2;
+    side = 0;
+    if(side == 0)
+    {
+        if(prt_bl->id == air && IsInBounds(x - 1, y))
+        {
+            MoveParticle(index, bl, water_particle);
+        }
+        else if(prt_br->id == air && IsInBounds(x + 1, y))
+        {
+            MoveParticle(index, br, water_particle);
+        }
+    }else{
+        if(prt_br->id == air && IsInBounds(x + 1, y))
+        {
+            MoveParticle(index, br, water_particle);
+        } else if(prt_bl->id == air && IsInBounds(x - 1, y))
+        {
+            MoveParticle(index, bl, water_particle);
+        }
+        
+    }
+}
 internal void
 UpdateSand(i32 x, i32 y)
 {
-    i32 index = GetIndex(x, y);
-    i32 b = GetIndex(x, y + 1);
-    i32 br = GetIndex(x - 1, y + 1);
-    i32 bl = GetIndex(x + 1, y + 1);
+    u32 index = GetIndex(x, y);
     
-    particle prt = *GetParticle(b);
-    particle prt_br = *GetParticle(br);
-    particle prt_bl = *GetParticle(bl);
     
-    if(prt.id == air && IsInBounds(x, y + 1))
+    
+    u32 b = GetIndex(x, y + 1);
+    u32 br = GetIndex(x + 1, y + 1);
+    u32 bl = GetIndex(x - 1, y + 1);
+    
+    
+    particle* prt = GetParticle(b);
+    particle* prt_br = GetParticle(br);
+    particle* prt_bl = GetParticle(bl);
+    if(GetParticle(index)->updated)
+        return;
+    if(prt->id == air && IsInBounds(x, y + 1))
     {
-        WriteData(b, sand_particle);
-        WriteData(index, empty_particle);
-    }else if(prt_br.id == air && IsInBounds(x - 1, y + 1))
+        MoveParticle(index, b, sand_particle);
+    } else if(prt_bl->id == air && IsInBounds(x - 1, y + 1))
     {
-        WriteData(br, sand_particle);
-        WriteData(index, empty_particle);
-    }else if(prt_bl.id == air && IsInBounds(x + 1, y + 1))
+        MoveParticle(index, bl, sand_particle);
+    } else if(prt_br->id == air && IsInBounds(x + 1, y + 1))
     {
-        WriteData(bl, sand_particle);
-        WriteData(index, empty_particle);
+        MoveParticle(index, br, sand_particle);
     }
     
+    /*
+    i32 side = rand() % 2;
+    if(side == 0)
+    {
+        if(prt_bl->id == air && IsInBounds(x - 1, y + 1))
+        {
+            MoveParticle(index, bl, sand_particle);
+            world_data[bl].updated = true;
+        }
+    }else if(side == 1) {
+        if(prt_br->id == air && IsInBounds(x + 1, y + 1))
+        {
+            MoveParticle(index, br, sand_particle);
+            world_data[br].updated = true;
+        }
+    }*/
 }
 
 int main(int argc, char** argv)

@@ -67,8 +67,10 @@ global struct mouse_t
 // Sandbox
 
 global particle *world_data;
-global const f32 gravity = 9.81f;
-global const i32 radius = 25;
+global const f32 gravity = 3.81f;
+global f32 radius = 15;
+global i32 frames = 0;
+global f32 delta_time = 1.0;
 
 enum particle_type : u8
 {
@@ -91,7 +93,7 @@ particle wood_particle { wood, wood_color, v2{0, 0}, false };
 internal void Init();
 internal void Run();
 internal void HandleEvents();
-internal void Update(f32 delta_time);
+internal void Update();
 internal void Render();
 
 internal void UpdateSand(i32 x, i32 y);
@@ -108,7 +110,13 @@ internal void EraseParticle(i32 x, i32 y);
 internal inline void MoveParticle(u32 from, u32 to, particle prt);
 internal void DrawCircle(i32 x, i32 y, i32 r, particle prt);
 internal void EraseCirlce(i32 x, i32 y, i32 r);
+internal void DrawLine(u32 *data, v2i a,  v2i b, u32 color);
 
+internal void RenderDrawUnfilledCircle(u32* data, i32 centreX, i32 centreY, i32 radius, u32 color);
+internal inline bool IsAir(i32 x, i32 y);
+internal inline bool IsCompletelySurrounded(i32 x, i32 y);
+internal inline  void SetPixel(u32* data, i32 x, i32 y, u32 color);
+internal float Clamp(f32 target, f32 min, f32 max);
 internal f32 Distance(v2 a, v2 b);
 internal inline i8 Sign(f32 value);
 
@@ -172,6 +180,18 @@ HandleEvents()
                 if(event.button.button == SDL_BUTTON_MIDDLE)
                     mouse.middle = false;
             } break;
+            case SDL_MOUSEWHEEL:
+            {
+                if(event.wheel.y > 0) 
+                {
+                    radius += 1.0f;
+                }
+                else if(event.wheel.y < 0) 
+                {
+                    radius -= 1.0f;
+                }
+                radius = Clamp(radius, 5, 25);
+            } break;
             case SDL_KEYDOWN:
             {
                 if(event.key.keysym.scancode == SDL_SCANCODE_ESCAPE)
@@ -187,13 +207,13 @@ Run()
 {
     f32 prev = SDL_GetTicks();
     f32 lag = 0.0f;
-    f32 delta_time = 0.0f;
+    f32 dt = 0.0f;
     for(;!interrupted;)
     {
         f32 current = SDL_GetTicks();
-        delta_time = (f32)(current - prev);
+        dt = (f32)(current - prev);
         prev = current;
-        lag += delta_time;
+        lag += dt;
         
         //delta_time = (float)((now - last) * 1000 / (float)SDL_GetPerormanceFrequency());
         
@@ -203,7 +223,8 @@ Run()
         
         while(lag >= ms_per_update)
         {
-            Update(delta_time * 0.001f);
+            Update();
+            delta_time = dt * 0.5;
             lag -= ms_per_update;
         }
         
@@ -219,13 +240,12 @@ Run()
 }
 
 internal void 
-Update(f32 delta_time)
+Update()
 {
     //printf("%f\n", delta_time);
     if(mouse.left)
     {
-        //DrawCircle((u32)mouse.pos.x, (u32)mouse.pos.y, radius, wood_particle);
-        SetParticle((u32)mouse.pos.x, (u32)mouse.pos.y, sand_particle);
+        DrawCircle((u32)mouse.pos.x, (u32)mouse.pos.y, radius, wood_particle);
     }
     if(mouse.right)
     {
@@ -236,17 +256,22 @@ Update(f32 delta_time)
         EraseCirlce((u32)mouse.pos.x, (u32)mouse.pos.y, radius);
     }
     
-    for(i32 y = height - 2; y >= 0; y--)
+    frames++;
+    
+    i32 ran = frames % 2;
+    //ran = 0;
+    if(frames > 10)
+        frames -= 10;
+    
+    for(i32 y = 1 ? height - 2 : 0; 1 ? y >= 0 : y < height - 2; 1 ?  y-- : y++)
     {
-        for(i32 x = 0; x < width; x++)
+        for(i32 x = ran ? width - 1 : 0; ran ? x >= 0 : x < width; ran ? x-- : x++)
         {
             u32 index = GetIndex(x, y);
             particle* prt = GetParticle(index); 
             
             
             if(prt == NULL)
-                continue;
-            if(prt->updated)
                 continue;
             
             
@@ -267,6 +292,77 @@ Update(f32 delta_time)
     
 }
 
+internal inline  void SetPixel(u32* data, i32 x, i32 y, u32 color)
+{
+    if(!IsInBounds(x, y))
+        return;
+    *(data + x + y * width) = color;
+}
+
+internal void RenderDrawUnfilledCircle(u32* data, i32 centreX, i32 centreY, i32 radius, u32 color)
+{
+    const i32 diameter = ((radius * 2));
+    
+    i32 x = (radius - 1);
+    i32 y = 0;
+    i32 tx = 1;
+    i32 ty = 1;
+    i32 error = (tx - diameter);
+    
+    while (x >= y)
+    {
+        SetPixel(data, (centreX + x), (centreY - y), color);
+        SetPixel(data, (centreX + x), (centreY + y), color);
+        SetPixel(data, (centreX - x), (centreY - y), color);
+        SetPixel(data, (centreX - x), (centreY + y), color);
+        SetPixel(data, (centreX + y), (centreY - x), color);
+        SetPixel(data, (centreX + y), (centreY + x), color);
+        SetPixel(data, (centreX - y), (centreY - x), color);
+        SetPixel(data, (centreX - y), (centreY + x), color);
+        if (error <= 0)
+        {
+            ++y;
+            error += ty;
+            ty += 2;
+        }
+        
+        if (error > 0)
+        {
+            --x;
+            tx += 2;
+            error += (tx - diameter);
+        }
+    }
+}
+
+internal void DrawLine(u32 *data, v2i a,  v2i b, u32 color)
+{
+    i32 dx, dy, p, x, y;
+    
+	dx = b.x - a.x;
+	dy = b.y - a.y;
+    
+	x = a.x;
+	y = a.y;
+    
+	p = 2 * dy-dx;
+    
+	while( x < b.x )
+	{
+		if(p>=0)
+		{
+            SetPixel(data, x, y, color);
+			y=y+1;
+			p=p+2*dy-2*dx;
+		}
+		else
+		{
+            SetPixel(data, x, y, color);
+			p=p+2*dy;
+		}
+		x=x+1;
+	}
+}
 
 #if 1
 internal void
@@ -280,6 +376,9 @@ Render()
             continue;
         data[i] = prt.color;
     }
+    
+    RenderDrawUnfilledCircle(&data[0], mouse.pos.x, mouse.pos.y, radius * 0.85, 0x2F50F6FF);
+    
     SDL_UpdateTexture(screen_texture, NULL, &data[0], sizeof(u32) * width);
     SDL_RenderCopy(renderer, screen_texture, NULL, NULL);
 }
@@ -290,6 +389,7 @@ Render()
     for(i32 i = 0; i < width * height; i++)
     {
         particle* prt = GetParticle(i);
+        
         if(prt->id == air)
             continue;
         i32 x = i % width;
@@ -321,6 +421,7 @@ internal void
 WriteData(i32 index, particle prt)
 {
     world_data[index] = prt;
+    //world_data[index].updated = true;
 }
 
 internal bool
@@ -337,6 +438,7 @@ SetParticle(i32 x, i32 y, particle prt)
     u32 index = GetIndex(x, y);
     if(GetParticle(index)->id == air)
         WriteData(index, prt);
+    //GetParticle(index)->updated = true;
     
 }
 
@@ -386,9 +488,11 @@ DrawCircle(i32 x, i32 y, i32 r, particle prt)
         for(i32 _y = y - r; _y < y + r; _y++)
         {
             f32 d = Distance(v2{x, y}, v2{_x, _y});
+            i32 s = rand() % 10;
             if(d >= r * 0.75)
                 continue;
-            SetParticle(_x, _y, prt);
+            if(s % 9 == 0)
+                SetParticle(_x, _y, prt);
         }
     }
 }
@@ -400,50 +504,156 @@ MoveParticle(u32 from, u32 to, particle prt)
     WriteData(from, empty_particle);
 }
 
+internal inline bool IsAir(i32 x, i32 y)
+{
+    return IsInBounds(x, y) &&  GetParticle(GetIndex(x, y))->id == air;
+}
+
+internal float Clamp(f32 target, f32 min, f32 max)
+{
+    if(min > target)
+        return min;
+    if(max < target)
+        return max;
+    return target;
+}
+
+internal inline bool
+IsCompletelySurrounded(i32 x, i32 y)
+{
+    return  
+        IsAir(x + 1, y + 1)
+        && IsAir(x + 1, y - 1)
+        && IsAir(x - 1, y + 1)
+        && IsAir(x - 1, y - 1)
+        && IsAir(x + 1, y)
+        && IsAir(x - 1, y)
+        && IsAir(x, y + 1)
+        && IsAir(x, y - 1);
+}
+
 internal void
 UpdateWater(i32 x, i32 y)
 {
-    u32 index = GetIndex(x, y);
+    i32 index = GetIndex(x, y);
+    
+    //if(IsCompletelySurrounded(x, y))
+    //return;
+    
+    i32 b = GetIndex(x, y + 1);
+    i32 br = GetIndex(x + 1, y + 1);
+    i32 bl = GetIndex(x - 1, y + 1);
+    i32 l = GetIndex(x - 1, y);
+    i32 r = GetIndex(x + 1, y);
     
     
     
-    u32 b = GetIndex(x, y + 1);
-    u32 br = GetIndex(x + 1, y);
-    u32 bl = GetIndex(x - 1, y);
+    particle origin = *GetParticle(index);
     
+    GetParticle(index)->updated = true;
     
-    particle* prt = GetParticle(b);
-    particle* prt_br = GetParticle(br);
-    particle* prt_bl = GetParticle(bl);
+    particle prt = *GetParticle(b);
+    particle prt_br = *GetParticle(br);
+    particle prt_bl = *GetParticle(bl);
     
-    if(prt->id == air && IsInBounds(x, y + 1))
+    particle prt_l = *GetParticle(l);
+    particle prt_r = *GetParticle(r);
+    
+    if(prt.id == air && IsInBounds(x, y + 1))
     {
-        MoveParticle(index, b, water_particle);
-        return;
-    }
-    i32 side = rand() % 2;
-    side = 0;
-    if(side == 0)
+        WriteData(b, origin);
+        WriteData(index, empty_particle);
+    } else if(prt_br.id == air && IsInBounds(x + 1, y + 1))
     {
-        if(prt_bl->id == air && IsInBounds(x - 1, y))
-        {
-            MoveParticle(index, bl, water_particle);
-        }
-        else if(prt_br->id == air && IsInBounds(x + 1, y))
-        {
-            MoveParticle(index, br, water_particle);
-        }
-    }else{
-        if(prt_br->id == air && IsInBounds(x + 1, y))
-        {
-            MoveParticle(index, br, water_particle);
-        } else if(prt_bl->id == air && IsInBounds(x - 1, y))
-        {
-            MoveParticle(index, bl, water_particle);
-        }
-        
+        WriteData(br, origin);
+        WriteData(index, empty_particle);
+    }else if(prt_bl.id == air && IsInBounds(x - 1, y + 1))
+    {
+        WriteData(bl, origin);
+        WriteData(index, empty_particle);
+    }else if(prt_l.id == air && IsInBounds(x - 1, y))
+    {
+        WriteData(l, origin);
+        WriteData(index, empty_particle);
+    }else if(prt_r.id == air && IsInBounds(x + 1, y))
+    {
+        WriteData(r, origin);
+        WriteData(index, empty_particle);
     }
 }
+
+#if 1
+
+
+internal void
+UpdateSand(i32 x, i32 y)
+{
+    
+    i32 index = GetIndex(x, y);
+    
+    
+    
+    particle* p = GetParticle(index);
+    particle tmp_a  = *GetParticle(index);
+    
+    p->velocity.y = Clamp(p->velocity.y + (gravity), -8, 8);
+    i32 vi_x = p->velocity.x + x;
+    i32 vi_y = p->velocity.y + y;
+    i32 dir_y = Sign(vi_y);
+    
+    i32 pos_y = y;
+    
+    
+    while(pos_y != vi_y)
+    {
+        pos_y += dir_y;
+        
+        if(!IsInBounds(x, pos_y))
+            break;
+        if(GetParticle(GetIndex(x, pos_y))->updated)
+            break;
+        
+        i32 b = GetIndex(x, pos_y);
+        i32 br = GetIndex(x + 1, pos_y);
+        i32 bl = GetIndex(x - 1, pos_y);
+        particle prt = *GetParticle(b);
+        particle prt_br = *GetParticle(br);
+        particle prt_bl = *GetParticle(bl);
+        
+        //if(GetParticle(GetIndex(vi_x, vi_y))->updated)
+        //break;
+        
+        if(IsAir(vi_x, vi_y))
+        {
+            particle tmp_b = *GetParticle(GetIndex(vi_x, vi_y));
+            WriteData(GetIndex(vi_x, vi_y), tmp_a);
+            WriteData(index, tmp_b);
+        }else
+            
+            if((prt.id == air) && IsInBounds(x, pos_y))
+        {
+            particle tmp_b = *GetParticle(b);
+            p->velocity.y = 0;
+            WriteData(b, *p);
+            WriteData(index, tmp_b);
+            break;
+        } else if((prt_br.id == air) && IsInBounds(x + 1, pos_y))
+        {
+            particle tmp_b = *GetParticle(br);
+            p->velocity.y = 0;
+            WriteData(br, *p);
+            WriteData(index, tmp_b);
+        }else if((prt_bl.id == air) && IsInBounds(x - 1, pos_y))
+        {
+            particle tmp_b = *GetParticle(bl);
+            p->velocity.y = 0;
+            WriteData(bl, *p);
+            WriteData(index, tmp_b);
+        }
+    }
+}
+
+#else
 
 internal void
 UpdateSand(i32 x, i32 y)
@@ -453,24 +663,37 @@ UpdateSand(i32 x, i32 y)
     i32 br = GetIndex(x + 1, y + 1);
     i32 bl = GetIndex(x - 1, y + 1);
     
-    particle* prt = GetParticle(b);
-    particle* prt_br = GetParticle(br);
-    particle* prt_bl = GetParticle(bl);
     
-    if(prt->id == air && IsInBounds(x, y + 1))
+    particle* p = GetParticle(index);
+    particle tmp_a  = *GetParticle(index);
+    
+    
+    
+    particle prt = *GetParticle(b);
+    particle prt_br = *GetParticle(br);
+    particle prt_bl = *GetParticle(bl);
+    
+    
+    if((prt.id == air) && IsInBounds(x, y + 1))
     {
-        MoveParticle(index, b, sand_particle);
-        GetParticle(b)->updated = true;
-    } else if(prt_br->id == air && IsInBounds(x + 1, y + 1))
+        particle tmp_b = *GetParticle(b);
+        WriteData(b, *p);
+        WriteData(index, tmp_b);
+    } else if((prt_br.id == air) && IsInBounds(x + 1, y + 1))
     {
-        MoveParticle(index, br, sand_particle);
-        GetParticle(br)->updated = true;
-    } else if(prt_bl->id == air && IsInBounds(x - 1, y + 1))
+        particle tmp_b = *GetParticle(br);
+        WriteData(br, *p);
+        WriteData(index, tmp_b);
+    }else if((prt_bl.id == air) && IsInBounds(x - 1, y + 1))
     {
-        MoveParticle(index, bl, sand_particle);
-        GetParticle(bl)->updated = true;
+        particle tmp_b = *GetParticle(bl);
+        WriteData(bl, *p);
+        WriteData(index, tmp_b);
     }
 }
+
+#endif
+
 
 int main(int argc, char** argv)
 {
